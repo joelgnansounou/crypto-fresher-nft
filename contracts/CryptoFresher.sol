@@ -1,23 +1,33 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
 
-contract CryptoFresher is ERC721Burnable, Ownable {
+contract CryptoFresher is ERC721Burnable, Ownable, AccessControl {
     uint256 private _tokenIdTracker;
     mapping(address => uint256[]) ownedTokens;
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
-    constructor() ERC721("CryptoFresher", "CFSH") Ownable(msg.sender) {}
-
-    function mint(address to) public onlyOwner {
-        _mintFresher(to);
+    constructor() ERC721("CryptoFresher", "CFSH") Ownable(msg.sender) {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(MINTER_ROLE, msg.sender);
     }
 
-    function bulkMint(address to, uint256 amount) public onlyOwner {
+    modifier mustHaveMinterRole() {
+        require(hasRole(MINTER_ROLE, msg.sender), "You must have the minter role");
+        _;
+    }
+
+    function mint(address to) public mustHaveMinterRole {
+        _mintFresherNFT(to);
+    }
+
+    function bulkMint(address to, uint256 amount) public mustHaveMinterRole {
         for (uint256 index = 0; index < amount; index++) {
-            _mintFresher(to);
+            _mintFresherNFT(to);
         }
     }
 
@@ -27,13 +37,15 @@ contract CryptoFresher is ERC721Burnable, Ownable {
         tokenIds = ownedTokens[account];
     }
 
-    function _onwedTokensCount(
-        address account
-    ) private view returns (uint256 count) {
-        count = ownedTokens[account].length;
+    function grantMinterRole(address account) public onlyOwner() {
+        grantRole(MINTER_ROLE, account);
     }
 
-    function _mintFresher(address to) private {
+    function revokeMinterRole(address account) public onlyOwner() {
+        revokeRole(MINTER_ROLE, account);
+    }
+
+    function _mintFresherNFT(address to) private {
         _mint(to, _tokenIdTracker);
         _tokenIdTracker++;
     }
@@ -46,7 +58,7 @@ contract CryptoFresher is ERC721Burnable, Ownable {
         address previousOwner = super._update(to, tokenId, auth);
 
         if (previousOwner != address(0)) {
-            uint256 count = _onwedTokensCount(previousOwner);
+            uint256 count = ownedTokens[previousOwner].length;
             uint256[] memory newOwnedTokens = new uint256[](count - 1);
             uint256 j = 0;
 
@@ -65,5 +77,9 @@ contract CryptoFresher is ERC721Burnable, Ownable {
         }
 
         return previousOwner;
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view virtual override(AccessControl, ERC721) returns (bool) {
+        return super.supportsInterface(interfaceId);
     }
 }
